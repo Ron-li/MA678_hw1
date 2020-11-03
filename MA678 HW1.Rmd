@@ -1,0 +1,458 @@
+---
+title: "HW 1 Solutions"
+date: "9/7/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load("bayesplot","knitr","arm","ggplot2","rstanarm")
+```
+
+Rong Li, ID: U73933267
+```{r}
+library(rstanarm)
+library(ggplot2)
+```
+
+## 7.2 Fake-data simulation and regression: 
+Simulate 100 data points from the linear model, y =  a + bx + error, with a = 5, b = 7, the values of x being sampled at random from a uniform  distribution on the range [0, 50], and errors that are normally distributed with mean 0 and standard deviation 3. 
+
+### 7.2a 
+Fit a regression line to these data and display the output. 
+
+```{r}
+a <- 5
+b <- 7
+sigma <- 3
+n = 100
+
+set.seed(1)
+x <- runif(n, 0, 50)
+error <- rnorm(n, 0, sigma)
+y <- a + b*x + error
+fake <- data.frame(x, y)
+
+fit <- stan_glm(y~x, data = fake)
+print(fit)
+print(coef(fit))
+```
+The fitted regression line is y = 4.48 + 7.02 x.  
+
+### 7.2b 
+Graph a scatterplot of the data and the regression line. 
+
+```{r}
+plot(fake$x, fake$y, main="Data and fitted regression line", bty="l", pch=20,
+     xlab = "x", ylab = "y")
+abline(coef(fit)[1], coef(fit)[2], col="blue")
+```
+
+### 7.2c 
+Use the text function in R to add the formula of the fitted line to the graph. 
+
+```{r}
+plot(fake$x, fake$y, main="Data and fitted regression line with formular", bty="l", pch=20,
+     xlab = "x", ylab = "y")
+abline(coef(fit)[1], coef(fit)[2], col="blue")
+x_bar <- mean(fake$x)
+text(x_bar, coef(fit)[1] + coef(fit)[2]*x_bar, paste("y =", round(coef(fit)[1], 2), "+", round(coef(fit)[2], 2), "x"), adj=0)
+```
+
+## 7.3 Fake-data simulation and fitting the wrong model: 
+Simulate 100 data points from the model,  y = a + bx + cx2 + error, with the values of x being sampled at random from a uniform  distribution on the range [0, 50], errors that are normally distributed with mean 0 and standard  deviation 3, and a, b, c chosen so that a scatterplot of the data shows a clear nonlinear curve. 
+
+
+### 7.3 a
+Fit a regression line stan_glm(y ~ x) to these data and display the output. 
+
+```{r}
+n <- 100
+a <- 2
+b <- -3
+c <- 1
+
+set.seed(1)
+x <- runif(n, 0, 50)
+error <- rnorm(n, 0, 3)
+y <- a + b*x + c*x^2 + error
+
+fake <- data.frame(x, y)
+fit <- stan_glm(y ~ x + I(x^2), data = fake)
+print(fit)
+print(coef(fit))
+```
+The fitted regression line is: y = 1.39 - 2.97x + x^2^.  
+
+### 7.3b
+Graph a scatterplot of the data and the regression line. This is the best-fit linear regression.  What does “best-fit” mean in this context?
+
+```{r}
+a_hat <- coef(fit)[1]
+b_hat <- coef(fit)[2]
+c_hat <- coef(fit)[3]
+plot(fake$x, fake$y, main="Data and fitted regression line", bty="l", pch=20,
+     xlab = "x", ylab = "y")
+curve(a_hat + b_hat*x + c_hat*x^2, 0, 50, col="blue", add=T)
+x_bar <- mean(fake$x)
+text(x_bar+2, a_hat + b_hat*x_bar + c_hat*x_bar^2, paste("y =", round(a_hat, 2), round(b_hat, 2), "x+", round(c_hat, 2), "x^2"), adj=0)
+```  
+The "best-fit" means the coefficients are LSE. And the equation y = 1.39 - 2.97x + x^2^ fits the data best in polynomial Regression.  
+
+## 7.6 Formulating comparisons as regression models: 
+Take the election forecasting model and simplify  it by creating a binary predictor defined as x = 0 if income growth is less than 2% and x = 1 if  income growth is more than 2%. 
+
+```{r}
+hibbs <- read.table("/Users/amelia/Desktop/678hw1/hibbs.dat", header=TRUE)
+```
+
+### 7.6a
+Compute the difference in incumbent party’s vote share on average, comparing those two  groups of elections, and determine the standard error for this difference.
+
+```{r}
+x <- data.frame()
+for (i in 1:16){
+  
+x[i, 1] <- ifelse(hibbs[i, 2] > 2, 1, 0)
+
+}
+newdata <- data.frame(hibbs$vote, x)
+mean_diff <- tapply(newdata[, 1], newdata$V1, mean)
+se <- sqrt(var(newdata$hibbs.vote[newdata$V1==1])/length(newdata$hibbs.vote[newdata$V1==1])+
+           var(newdata$hibbs.vote[newdata$V1==0])/length(newdata$hibbs.vote[newdata$V1==1]))
+diff <- mean_diff[2] - mean_diff[1]
+df76 <- data.frame(diff, se)
+row.names(df76) = "growth"
+print(df76)
+```
+The difference is 5.5 and the standard error is 2.5.  
+
+### 7.6b
+Regress incumbent party’s vote share on the binary predictor of income growth and check that the resulting estimate and standard error are the same as above. 
+
+```{r}
+fit <- stan_glm(hibbs.vote~V1, data = newdata)
+print(fit)
+```
+The resulting estimate and standard error are the same as above.  
+
+## 8.8 Comparing lm and stan_glm: 
+Use simulated data to compare least squares estimation to default Bayesian regression: 
+
+### 8.8a
+Simulate 100 data points from the model, y = 2 + 3x + error, with predictors x drawn from  a uniform distribution from 0 to 20, and with independent errors drawn from the normal distribution with mean 0 and standard deviation 5. Fit the regression of y on x data using  lm and stan_glm (using its default settings) and check that the two programs give nearly identical results. 
+
+```{r}
+n <- 100
+a <- 2
+b <- 3
+sigma <- 5
+
+set.seed(1)
+x <- runif(n, 0, 20)
+error <- rnorm(n, 0, sigma)
+y = a + b*x + error
+fake <- data.frame(x, y)
+fit1 <- lm(y~x, data = fake)
+fit2 <- stan_glm(y~x, data = fake)
+a_hat1 <- coef(fit1)[1]
+b_hat1 <- coef(fit1)[2]
+a_hat2 <- coef(fit2)[1]
+b_hat2 <- coef(fit2)[2]
+print(fit1)
+print(fit2)
+```
+The two programs give nearly identical results.  
+
+### 8.8b
+Plot the simulated data and the two fitted regression lines. 
+
+```{r}
+plot(fake$x, fake$y, main="Data and 2 fitted regression lines", bty="l", pch=20,
+     xlab = "x", ylab = "y")
+abline(a_hat1, b_hat1, col = "blue")
+abline(a_hat2, b_hat2, col = "red")
+x_bar <- mean(fake$x)
+text(x_bar, a_hat1 + b_hat1*x_bar-5, paste("y =", round(a_hat1, 2), "+", round(b_hat1, 2), "x"), adj=0, col = "blue")
+text(x_bar-4, a_hat2 + b_hat2*x_bar+10, paste("y =", round(a_hat2, 2), "+", round(b_hat2, 2), "x"), adj=0, col = "red")
+
+```
+
+### 8.8c
+Repeat the two steps above, but try to create conditions for your simulation so that lm and  stan_glm give much different results. 
+
+```{r,echo=F}
+set.seed(1)
+x <- runif(5, 18, 20)
+error <- rnorm(5, 0, 3)
+y = 1 + 5*x + error
+fake <- data.frame(x, y)
+fit1 <- lm(y~x, data = fake)
+fit2 <- stan_glm(y~x, data = fake)
+a_hat1 <- coef(fit1)[1]
+b_hat1 <- coef(fit1)[2]
+a_hat2 <- coef(fit2)[1]
+b_hat2 <- coef(fit2)[2]
+print(fit1)
+print(fit2)
+plot(fake$x, fake$y, main="Data and 2 fitted regression lines", bty="l", pch=20,
+     xlab = "x", ylab = "y")
+abline(a_hat1, b_hat1, col = "blue")
+abline(a_hat2, b_hat2, col = "red")
+x_bar <- mean(fake$x)
+text(x_bar, a_hat1 + b_hat1*x_bar+0.7, paste("y =", round(a_hat1, 2), "+", round(b_hat1, 2), "x"), adj=0, col = "blue")
+text(x_bar, a_hat2 + b_hat2*x_bar-0.2, paste("y =", round(a_hat2, 2), "+", round(b_hat2, 2), "x"), adj=0, col = "red")
+```
+The lm gives the result: y = 69.49 + 1.35x;  
+The stan_glm gives the result: y = 69.75 + 1.32x.  
+
+## 10.1 Regression with interactions: 
+Simulate 100 data points from the model, y = b0 + b1x +  b2z + b3xz + error, with a continuous predictor x and a binary predictor z, coefficients  b = c(1, 2, -1, -2), and errors drawn independently from a normal distribution with mean 0  and standard deviation 3, as follows. For each data point i, first draw zi, equally likely to take  on the values 0 and 1. Then draw xi from a normal distribution with mean zi and standard  deviation 1. Then draw the error from its normal distribution and compute yi. 
+
+### 10.1a
+Display your simulated data as a graph of y vs. x, using dots and circles for the points with  z = 0 and 1, respectively. 
+
+```{r}
+set.seed(1)
+zi <- rbinom(100, 1, 0.5)
+z <- data.frame(zi)
+error <- rnorm(100, 0, 3)
+x <- data.frame()
+for (i in 1:100){
+
+x[i, 1] <- rnorm(1, z[i, 1], 1)
+
+}
+y = 1 + 2*x - z - 2*x*z + error
+fake <- data.frame(x, z, y)
+colors <- ifelse(fake$zi == 0, "blue", "red")
+pch1 <- ifelse(fake$zi == 0, 20, 1)
+plot(fake$V1, fake$V1.1, xlab = "x", ylab = "y", main="Simulated data", col = colors, pch = pch1)
+legend("bottomleft", inset=0.01,c("z=0", "z=1"), col=c("blue", "red"), lty = c(2, 4))
+```
+
+### 10.1b
+Fit a regression predicting y from x and z with no interaction. Make a graph with the data and two parallel lines showing the fitted model. 
+
+```{r}
+fit0 <- stan_glm(V1.1 ~ V1 + zi, data = fake)
+print(fit0)
+b_hat <- coef(fit0)
+plot(fake$V1, fake$V1.1, xlab = "x", ylab = "y", main="Data and two parallel lines", col = colors, pch = pch1)
+abline(b_hat[1], b_hat[2], col="blue")
+abline(b_hat[1] + b_hat[3], b_hat[2], col="red")
+x_bar <- mean(fake$V1)
+text(x_bar-0.5, b_hat[1] + b_hat[2]*x_bar+1.5, 
+     paste("y =", round(b_hat[1], 2), "+", round(b_hat[2], 2), "x"), 
+     adj=0, col = "blue")
+text(x_bar-0.5, b_hat[1] + b_hat[3] + b_hat[2]*x_bar-1, 
+     paste("y =", round(b_hat[1] + b_hat[3], 2), "+", round(b_hat[2], 2), "x"), 
+     adj=0, col = "red")
+```
+When z = 0, the fitted model is y = 0.81 + 1.26x;  
+When z = 1, the fitted model is y = -1.14 + 1.26x.  
+
+### 10.1c
+Fit a regression predicting y from x, z, and their interaction. Make a graph with the data  and two lines showing the fitted model. 
+
+```{r}
+fit1 <- stan_glm(V1.1 ~ V1 + zi + V1:zi, data = fake, refresh = 0)
+print(fit1)
+colors <- ifelse(fake$zi == 0, "blue", "red")
+pch1 <- ifelse(fake$zi == 0, 20, 1)
+plot(fake$V1, fake$V1.1, xlab = "x", ylab = "y", main="Data and two lines", col = colors, pch = pch1)
+b_hat <- coef(fit1)
+abline(b_hat[1], b_hat[2], col="blue")
+abline(b_hat[1] + b_hat[3], b_hat[2] + b_hat[4], col="red")
+text(x_bar-0.5, b_hat[1] + b_hat[2]*x_bar+1.5, 
+     paste("y =", round(b_hat[1], 2), "+", round(b_hat[2], 2), "x"), 
+     adj=0, col = "blue")
+text(x_bar-0.5, b_hat[1] + b_hat[3] + b_hat[2]*x_bar-1, 
+     paste("y =", round(b_hat[1] + b_hat[3], 2), "+", round(b_hat[2] + b_hat[4], 2), "x"), 
+     adj=0, col = "red")
+```
+When z = 0, the fitted model is: y = 0.77 + 2.23x;  
+When z = 1, the fitted model is: y = 0.07 + 0.07x.  
+
+## 10.2 Regression with interactions: 
+Here is the output from a fitted linear regression of outcome y on  pre-treatment predictor x, treatment indicator z, and their interaction:  
+
+### 10.2a
+Write the equation of the estimated regression line of y on x for the treatment group and the control group, and the equation of the estimated regression line of y on x for the control group.  
+
+The equation of the estimated regression line of y on x for the treatment group and the control group is y = 1.2 + 1.6x + 2.7z + 0.7xz;  
+The equation of the estimated regression line of y on x for the control group is y = 1.2 + 1.6x.  
+
+
+### 10.2b
+Graph with pen on paper the two regression lines, assuming the values of x fall in the range  (0, 10). On this graph also include a scatterplot of data (using open circles for treated units and dots for controls) that are consistent with the fitted model. 
+
+```{r}
+set.seed(1)
+b_hat <- c(1.2, 1.6, 2.7, 0.7)
+x <- runif(100, 0, 10)
+error <- rnorm(100, 0, 0.5)
+z <- round(runif(100, 0, 1))
+y <- b_hat[1] + b_hat[2]*x + b_hat[3]*z + b_hat[4]*x*z + error
+df <- data.frame(x, z, y)
+
+x_bar <- mean(df$x)
+ggplot(df, aes(x, y)) +
+  geom_point(aes(color = ifelse(z==0, "blue", "red")), pch=ifelse(z==0, 1, 20), show.legend = FALSE) +
+  geom_abline(
+    intercept = c(b_hat[1], b_hat[1] + b_hat[3]),
+    slope = c(b_hat[2], b_hat[2] + b_hat[4]),
+    color = c("red", "blue")) + 
+  geom_text(aes(x=x_bar,y=b_hat[1] + b_hat[2]*x_bar),label="y = 1.2+1.6x",
+            size=5,col = "red") + 
+  geom_text(aes(x=x_bar,y=b_hat[1] + b_hat[3] + (b_hat[2]+b_hat[4])*x_bar),label="y = 3.9+2.3x",
+            size=5,col = "blue") + 
+  labs(title = "Date and two regression lines")
+```
+
+## 10.5 Regression modeling and prediction: 
+The folder KidIQ contains a subset of the children and  mother data discussed earlier in the chapter. You have access to children’s test scores at age 3,  mother’s education, and the mother’s age at the time she gave birth for a sample of 400 children. 
+
+```{r}
+data_kid <- read.csv("/Users/amelia/Documents/MA678/kidiq/kidiq.csv", header = TRUE)
+kidiq <- head(data_kid, 400)
+```
+
+### 10.5a
+Fit a regression of child test scores on mother’s age, display the data and fitted model,  check assumptions, and interpret the slope coefficient. Based on this analysis, when  do you recommend mothers should give birth? What are you assuming in making this  recommendation? 
+
+```{r}
+fit <- stan_glm(kid_score~mom_age, data = kidiq)
+print(fit)
+ggplot(kidiq, aes(mom_age, kid_score)) + 
+  geom_point() + 
+  geom_abline(
+    intercept = coef(fit)[1], 
+    slope = coef(fit)[2],
+    col = "blue") + 
+  geom_text(aes(x=23, y=95), label="y = 66.7 + 0.9x",
+            size=5,col = "blue") + 
+  labs(title = "Date and the fitted model")
+```
+The assumptions (Gauss-Markov):  
+(1)var($\epsilon_i$) is the same, i = 1, 2, 3, ...;  
+(2)cov($\epsilon_i, \epsilon_j$) = 0, $i \neq j$.  
+Check the assumptions:
+```{r}
+error <- fitted(fit) - kidiq$kid_score
+df <- data.frame(kidiq, fitted(fit), error)
+ggplot(df, aes(x = error)) + geom_density() + labs(title = "The density plot of errors")
+qqnorm(df$error)
+```
+According to the images, the assumptions are not satisfied.
+The slope coefficient 0.9 means: if we compare a mother with age of 0 to mother with age of 1 expect the child to have difference in IQ of 0.9 on average.  
+```{r}
+a <- tapply(df$kid_score, df$mom_age, mean)
+print(a)
+```
+I recommend mothers should give birth at the age of 29. I assume the group size of every age is equal.  
+
+### 10.5b
+Repeat this for a regression that further includes mother’s education, interpreting both slope coefficients in this model. Have your conclusions about the timing of birth changed? 
+
+```{r}
+fit1 <- stan_glm(kid_score~mom_age + mom_hs, data = kidiq)
+print(fit1)
+```
+The slope coefficient of mom_age: Comparing childern with the same value of mom_hs, but whose mothers differ by 1 year in age, we would expect to see a difference of 0.5 points in the child's test score.  
+The slope coefficient of mom_hs: Comparing childern whose mothers have the same age, but who differed in whether they completed high school, the model predicts an expected difference of 11.5 in their test scores.  
+
+### 10.5c
+Now create an indicator variable reflecting whether the mother has completed high school or not. Consider interactions between high school completion and mother’s age. Also create a plot that shows the separate regression lines for each high school completion status group. 
+
+```{r}
+fit2 <- stan_glm(kid_score~mom_age + mom_hs + mom_age:mom_hs, data = kidiq)
+print(fit2)
+b_hat <- coef(fit2)
+x_bar <- mean(kidiq$mom_age)
+ggplot(kidiq, aes(mom_age, kid_score)) +
+  geom_point(aes(color = ifelse(mom_hs==0, "blue", "red")), show.legend = FALSE) +
+  geom_abline(
+    intercept = c(b_hat[1], b_hat[1] + b_hat[3]),
+    slope = c(b_hat[2], b_hat[2] + b_hat[4]),
+    color = c("red", "blue")) + 
+  geom_text(aes(x=x_bar,y=b_hat[1] + b_hat[2]*x_bar-1),label="y = 108.8 - 1.5x",size=5,col = "red") + 
+  geom_text(aes(x=x_bar,y=b_hat[1] + b_hat[3] + (b_hat[2]+b_hat[4])*x_bar),label="y = 67.1 + 0.97x",
+            size=5,col = "blue") + 
+  labs(title = "Data and separate regression lines")
+```
+
+### 10.5d
+Finally, fit a regression of child test scores on mother’s age and education level for the first  200 children and use this model to predict test scores for the next 200. Graphically display  comparisons of the predicted and actual scores for the final 200 children. 
+
+```{r}
+df2 <- kidiq[1:200,]
+df3 <- kidiq[201:400,]
+fit3 <- stan_glm(kid_score ~ mom_age + mom_hs + mom_age:mom_hs, data = df2)
+print(fit3)
+score_hat <- coef(fit3)[1] + coef(fit3)[2]*df3$mom_age + coef(fit3)[3]*df3$mom_hs + coef(fit3)[4]*df3$mom_age*df3$mom_hs
+df4 <- data.frame(df3, score_hat)
+ggplot(df4) +
+  geom_point(aes(mom_age, kid_score), show.legend = FALSE, col = "blue") +
+  geom_point(aes(mom_age, score_hat), show.legend = FALSE, col = "red") + 
+  labs(title = "Predicted and actual scores")
+#blue dots are the actual scores; red dots are the predcted scores
+```
+
+## 10.6 Regression models with interactions: 
+The folder Beauty contains data (use file beauty.csv)  Beauty and teaching  evaluations from Hamermesh and Parker (2005) on student evaluations of instructors’ beauty and teaching  quality for several courses at the University of Texas. The teaching evaluations were conducted  at the end of the semester, and the beauty judgments were made later, by six students who had  not attended the classes and were not aware of the course evaluations. 
+
+See also Felton, Mitchell, and Stinson (2003) for more on this topic. 
+
+```{r}
+df106 <- read.csv("/Users/amelia/Desktop/678hw1/beauty.csv", header=T)
+```
+
+### 10.6a
+Run a regression using beauty (the variable beauty) to predict course evaluations (eval),  adjusting for various other predictors. Graph the data and fitted model, and explain the  meaning of each of the coefficients along with the residual standard deviation. Plot the residuals versus fitted values. 
+
+```{r}
+fit106 <- stan_glm(eval~beauty, data = df106)
+print(fit106)
+ggplot(df106, aes(beauty, eval)) + 
+  geom_point(show.legend = FALSE) + 
+  geom_abline(
+    intercept = coef(fit106)[1], 
+    slope = coef(fit106)[2], 
+    color = "blue") + 
+  labs(title = "Data and fitted model")
+```
+The intercept 4.0 reflects the predicted course evaluation for teacher whose beauty is 0.  
+The coefficient of beauty means: If we compare a teacher with beauty of 0 to teacher with beauty of 1 expect the teacher to have difference in course evaluation of 0.1 on average.  
+```{r}
+residual <- coef(fit106)[1] + coef(fit106)[2] * df106$beauty
+df106_1 <- data.frame(fitted(fit106), residual)
+colnames(df106_1)[1] <- 'fitted_values'
+ggplot(df106_1, aes(fitted_values, residual)) +
+  geom_point(show.legend = FALSE) + 
+  labs(title = "Residuals versus fitted values")
+```
+
+
+### 10.6b
+Fit some other models, including beauty and also other predictors. Consider at least one  model with interactions. For each model, explain the meaning of each of its estimated  coefficients.  
+
+The first model is $eval = \beta_0+\beta_1beauty+\beta_2female+\epsilon$
+```{r}
+fit106_1 <- stan_glm(eval ~ beauty + female, data = df106)
+print(fit106_1)
+```
+The intercept 4.1 means: If a male teacher whose beauty is 0, then we would predict his course evaluation to be 4.1.  
+The coefficient of beauty means: Comparing teachers of the same gender, but whose beauty differs by 1 point, we would expect to see a difference of 0.1 in the course evaluation.  
+The coefficient of female means: Comparing teachers with the same value of beauty, but differ in gender, the model predicts an expected difference of 0.2.  
+
+The second model is $eval = \beta_0+\beta_1beauty+\beta_2female+\beta_3beauty*female+\epsilon$
+```{r}
+fit106_2 <- stan_glm(eval ~ beauty + female + beauty:female, data = df106)
+print(fit106_2)
+```
+The intercept 4.1 represents the predicted course evaluation scores for male teachers whose beauty score is 0.  
+The coefficient of beauty can be thought of as the comparison of mean course evaluation scores across male teachers whose beauty differs by 1 point.  
+The coefficient of female can be conceived as the difference between the predicted course evaluation scores for male teachers who have beauty of 0, and female teachers who have beauty of 0.  
+The coefficient on the interaction term represents the difference in the slope for beauty, comparing male teachers and female teachers.
+
